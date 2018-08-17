@@ -2,7 +2,8 @@
   "extends": "standard",
   "rules": {
     "no-extra-semi": "error",
-    "semi": [2, "always"]
+    "semi": [2, "always"],
+    "no-trailing-spaces": ["error", { "skipBlankLines": true }]
   }
 }
  
