@@ -1,7 +1,12 @@
 const fs = require('mz/fs');
 const path = require('path');
 
-let [ ,, dirForSort = 'images', sortedDir = 'sortedImges', isDel = 'yes' ] = process.argv;
+let [ ,, dirForSort, sortedDir = 'sortedImges', isDel = 'yes' ] = process.argv;
+
+if (!dirForSort) {
+  console.error('Необходимо передать название папки для сортировки');
+  process.exit(1);
+}
 
 dirForSort = path.join(__dirname, dirForSort);
 sortedDir = path.join(__dirname, sortedDir);
@@ -12,8 +17,8 @@ sortFiles(dirForSort, sortedDir, isDel)
 
 function sortFiles (from, to, isDel) {
   return new Promise((resolve, reject) => {
-    if (!from) {
-      console.error('Необходимо передать название папки для сортировки');
+    if (!fs.existsSync(from)) {
+      console.error('Проверьте название папки для сортировки');
       process.exit(1);
     }
 
