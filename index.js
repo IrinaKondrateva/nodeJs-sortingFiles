@@ -1,84 +1,109 @@
-const fs = require('fs');
+const fs = require('mz/fs');
 const path = require('path');
 
-let [ ,, dirForSort, sortedDir = 'sortedImges', delInitDir = 'yes' ] = process.argv;
-
-if (!dirForSort) {
-  console.error('Необходимо передать название папки для сортировки');
-  process.exit(1);
-}
+let [ ,, dirForSort = 'images', sortedDir = 'sortedImges', isDel = 'yes' ] = process.argv;
 
 dirForSort = path.join(__dirname, dirForSort);
 sortedDir = path.join(__dirname, sortedDir);
 
-if (!fs.existsSync(dirForSort)) {
-  console.error('Проверьте название папки для сортировки');
-  process.exit(1);
-}
+sortFiles(dirForSort, sortedDir, isDel)
+  .then(result => console.log(result))
+  .catch(err => console.error(err.message));
 
-makeDir(sortedDir);
+function sortFiles (from, to, isDel) {
+  return new Promise((resolve, reject) => {
+    if (!from) {
+      console.error('Необходимо передать название папки для сортировки');
+      process.exit(1);
+    }
 
-const readDir = dir => {
-  try {
-    const filesFolders = fs.readdirSync(dir);
+    makeDir(to);
+    readDir(from);
 
-    filesFolders.forEach(item => {
-      const localDir = path.join(dir, item);
-      const stats = fs.statSync(localDir);
+    async function readDir (dir) {
+      try {
+        let copiedItems;
+        let filesFolders = await fs.readdir(dir);
 
-      if (stats.isDirectory()) {
-        readDir(localDir);
-      } else {
-        let letterDir = path.join(sortedDir, item[0].toUpperCase());
-        
-        makeDir(letterDir);
-        
-        try {
-          fs.copyFileSync(localDir, path.join(letterDir, item));
-        } catch (err) {
-          console.error('Не удалось скопировать файл', err.message);
-          process.exit(1);
+        if (!filesFolders.length) return 'папка пуста';
+
+        filesFolders = filesFolders.map(item => {
+          return (async () => {
+            const localDir = path.join(dir, item);
+            const stats = await fs.stat(localDir);
+      
+            if (stats.isDirectory()) {
+              await readDir(localDir);
+            } else {
+              let letterDir = path.join(to, item[0].toUpperCase());
+              
+              makeDir(letterDir);
+      
+              try {
+                await fs.copyFile(localDir, path.join(letterDir, item));
+              } catch (err) {
+                console.error('Не удалось скопировать файл', err.message);
+              }
+            }
+
+            return localDir;
+          })();
+        });
+
+        copiedItems = await Promise.all(filesFolders);
+
+        if (isDel === 'yes' && (await delFilesDir(copiedItems) === 'Successfully')) {
+          resolve('Successfully');
         }
+      } catch (err) {
+        reject(err);
       }
-
-      if (delInitDir === 'yes') {
-        delFilesDir(localDir);
-      }
-    });
-  } catch (err) {
-    console.error(err.message);
-  }
-};
-
-readDir(dirForSort);
-
-function makeDir (dir) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir);
-  }
+    }
+  });
 }
 
-function delFilesDir (item) {
+async function delFilesDir (arrForDel) {
   try {
-    if (!fs.existsSync(item)) return;
-    const stats = fs.statSync(item);
+    let deletedItems;
+
+    if (!arrForDel.length) return 'нечего удалять';
+
+    arrForDel = arrForDel.map(item => {
+      return (async () => {
+        const stats = await fs.stat(item);
     
-    if (stats.isDirectory()) {
-      const filesFolders = fs.readdirSync(item);
-  
-      if (filesFolders.length) return;
-      fs.rmdirSync(item);
-  
-      if (path.dirname(item) !== dirForSort) {
-        delFilesDir(path.dirname(item));
-      } else {
-        delFilesDir(dirForSort);
-        console.log('Done');
-      }
-    } else {
-      fs.unlinkSync(item);
+        if (stats.isDirectory()) {
+          await fs.rmdir(item);
+        } else {
+          await fs.unlink(item);
+        }
+
+        return item;
+      })();
+    });
+
+    deletedItems = await Promise.all(arrForDel);
+
+    if (deletedItems.every(item => (path.dirname(item) === dirForSort))) {
+      await fs.rmdir(dirForSort);
+      return 'Successfully';
     }
   } catch (err) {
-    console.error('Ошибка при удалении файла/папки', err.message);
+    console.error('Ошибка при удалении папки/файла', err.message);
   }
 }
+
+function makeDir (dir) {
+  try {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir);
+    }
+  } catch (err) {
+    console.error('Ошибка при создании папки', err.message);
+    process.exit(1);
+  }
+}
+
+process.on('unhandledRejection', (reason, p) => {
+  console.log('Unhandled Rejection at:', p, 'reason:', reason);
+});
